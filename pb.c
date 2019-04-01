@@ -244,7 +244,7 @@ static pb_Slice lpb_toslice(lua_State *L, int idx) {
         else if ((s = test_slice(L, idx)) != NULL)
             ret = s->base;
     } else if (type == LUA_TLIGHTUSERDATA) {
-        const char *s = lua_touserdata(L, idx);
+        const char *s = (const char *s)lua_touserdata(L, idx);
         size_t len = (size_t)lpb_checkinteger(L, idx + 1);
         ret = pb_lslice(s, len);
     }
