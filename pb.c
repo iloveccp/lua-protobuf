@@ -189,6 +189,8 @@ typedef struct lpb_SliceEx {
     const char *head;
 } lpb_SliceEx;
 
+static uint64_t lpb_checkinteger(lua_State *L, int idx);
+
 static int lpb_offset(lpb_SliceEx *s) { return (int)(s->base.p-s->head) + 1; }
 
 static lpb_SliceEx lpb_initext(pb_Slice s)
@@ -241,6 +243,10 @@ static pb_Slice lpb_toslice(lua_State *L, int idx) {
             ret = pb_result(buffer);
         else if ((s = test_slice(L, idx)) != NULL)
             ret = s->base;
+    } else if (type == LUA_TLIGHTUSERDATA) {
+        const char *s = lua_touserdata(L, idx);
+        size_t len = (size_t)lpb_checkinteger(L, idx + 1);
+        ret = pb_lslice(s, len);
     }
     return ret;
 }
@@ -1498,19 +1504,28 @@ static int Lpb_encode(lua_State *L) {
     lpb_State *LS = default_lstate(L);
     pb_Type *t = lpb_type(&LS->base, luaL_checkstring(L, 1));
     lpb_Env e;
+    int top = lua_gettop(L);
+    int type = lua_type(L, 3);
     argcheck(L, t!=NULL, 1, "type '%s' does not exists", lua_tostring(L, 1));
     luaL_checktype(L, 2, LUA_TTABLE);
-    e.L = L, e.LS = LS, e.b = test_buffer(L, 3);
-    if (e.b == NULL) pb_resetbuffer(e.b = &LS->buffer);
+    e.L = L, e.LS = LS;
+    if (type == LUA_TUSERDATA)
+        e.b = test_buffer(L, 3);
+    else
+        pb_resetbuffer(e.b = &LS->buffer);
     lua_pushvalue(L, 2);
     lpb_encode(&e, t);
-    if (e.b != &LS->buffer)
-        lua_settop(L, 3);
-    else {
+    lua_settop(L, top);
+    if (type == LUA_TFUNCTION) {
+        lua_pushlightuserdata(L, e.b->buff);
+        lpb_pushinteger(L, e.b->size, LPB_NUMBER);
+        lua_call(L, top - 1, LUA_MULTRET);
+        pb_resetbuffer(e.b);
+    } else if (e.b == &LS->buffer) {
         lua_pushlstring(L, e.b->buff, e.b->size);
         pb_resetbuffer(e.b);
     }
-    return 1;
+    return lua_gettop(L) - 2;
 }
 
 
